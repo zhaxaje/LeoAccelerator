@@ -122,7 +122,7 @@ class LeoVpnService : VpnService() {
 
     private fun copyV2RayFromAssets(v2rayFile: File) {
         try {
-            val assetList = assets.list()
+            val assetList = assets.list(null)
             val v2rayAssets = assetList?.find { it.startsWith("v2ray") || it.contains("v2ray") }
             
             if (v2rayAssets != null) {
