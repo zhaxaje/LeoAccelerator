@@ -28,10 +28,7 @@ class LeoVpnService : VpnService() {
 
     private fun showNotification(message: String) {
         try {
-            val notification = createNotification().apply {
-                this.flags = notification.flags or Notification.FLAG_AUTO_CANCEL
-                android.content.BigTextStyle(android.app.Notification.Builder(this@LeoVpnService, CHANNEL_ID))
-            }
+            val notification = createNotification()
             val manager = getSystemService(NotificationManager::class.java)
             manager.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
