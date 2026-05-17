@@ -6,9 +6,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
+        android:networkSecurityConfig="@xml/network_security_config"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Leo游戏加速器"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.LeoAccelerator">
 
         <activity
