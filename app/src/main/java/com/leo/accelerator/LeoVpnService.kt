@@ -46,7 +46,7 @@ class LeoVpnService : VpnService() {
 
         Thread {
             try {
-                val builder = Builder()
+                vpnInterface = Builder()
                     .setSession("Leo游戏加速器")
                     .addAddress("10.0.0.2", 32)
                     .addRoute("0.0.0.0", 0)
@@ -55,11 +55,10 @@ class LeoVpnService : VpnService() {
                     .setMtu(1500)
                     .establish()
 
-                vpnInterface = builder.establish()!!
-
-                val fd = vpnInterface.fileDescriptor
-                val inputStream = FileInputStream(fd)
-                val outputStream = FileOutputStream(fd)
+                vpnInterface?.let { vpn ->
+                    val fd = vpn.fileDescriptor
+                    val inputStream = FileInputStream(fd)
+                    val outputStream = FileOutputStream(fd)
 
                 val buffer = ByteBuffer.allocate(32767)
 
