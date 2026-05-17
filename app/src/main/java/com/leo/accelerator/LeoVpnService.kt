@@ -57,8 +57,9 @@ class LeoVpnService : VpnService() {
 
                 vpnInterface = builder
 
-                val inputStream = FileInputStream(builder.fileDescriptor)
-                val outputStream = FileOutputStream(builder.fileDescriptor)
+                val fd = builder.establish()!!
+                val inputStream = FileInputStream(fd)
+                val outputStream = FileOutputStream(fd)
 
                 val buffer = ByteBuffer.allocate(32767)
 
