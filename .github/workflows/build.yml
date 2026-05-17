@@ -27,12 +27,8 @@ jobs:
     
     - name: Build Debug APK
       run: |
-        cd ${{ github.workspace }}
         chmod +x gradlew
         ./gradlew assembleDebug
-        
-        # Check if APK exists
-        ls -la app/build/outputs/apk/debug/
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
