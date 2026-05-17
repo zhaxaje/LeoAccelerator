@@ -90,9 +90,11 @@ class LeoVpnService : VpnService() {
             val response = ByteArray(32767)
             val read = socket.getInputStream().read(response)
             if (read > 0) {
-                val outputStream = FileOutputStream(vpnInterface?.fileDescriptor ?: return)
-                outputStream.write(response, 0, read)
-                outputStream.flush()
+                vpnInterface?.fileDescriptor?.let { fd ->
+                    val outputStream = FileOutputStream(fd)
+                    outputStream.write(response, 0, read)
+                    outputStream.flush()
+                }
             }
             socket.close()
         } catch (e: Exception) {
