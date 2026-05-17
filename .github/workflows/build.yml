@@ -29,10 +29,12 @@ jobs:
       run: |
         cd ${{ github.workspace }}
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace 2>&1 || echo "Build failed, checking for issues..."
+        ./gradlew assembleDebug
+        
+        # Check if APK exists
+        ls -la app/build/outputs/apk/debug/
     
     - name: Upload APK
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: LeoAccelerator-debug
