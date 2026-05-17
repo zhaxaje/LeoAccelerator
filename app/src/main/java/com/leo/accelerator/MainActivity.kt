@@ -56,12 +56,15 @@ class MainActivity : AppCompatActivity() {
                     currentNode = nodes.first()
                     nodeText.text = "当前节点: ${currentNode?.name}"
                     statusText.text = "已加载 ${nodes.size} 个节点"
+                    connectBtn.isEnabled = true
                     Toast.makeText(this@MainActivity, "订阅加载成功", Toast.LENGTH_SHORT).show()
                 } else {
-                    statusText.text = "加载失败"
+                    statusText.text = "加载失败：无节点"
+                    connectBtn.isEnabled = false
                 }
             } catch (e: Exception) {
-                statusText.text = "订阅解析失败: ${e.message}"
+                statusText.text = "加载失败: ${e.message}"
+                connectBtn.isEnabled = false
             }
         }
     }
