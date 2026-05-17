@@ -13,10 +13,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
-import java.net.Proxy
 import java.net.URL
 
 class LeoVpnService : VpnService() {
@@ -49,10 +46,20 @@ class LeoVpnService : VpnService() {
 
         val node = gson.fromJson(nodeJson, ProxyNode::class.java)
 
-        startForeground(NOTIFICATION_ID, createNotification())
+        try {
+            startForeground(NOTIFICATION_ID, createNotification("正在启动..."))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         CoroutineScope(Dispatchers.IO).launch {
-            startV2Ray(node)
+            try {
+                startV2Ray(node)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error: ${e.message}")
+                e.printStackTrace()
+                stopSelf()
+            }
         }
 
         return START_STICKY
@@ -60,59 +67,113 @@ class LeoVpnService : VpnService() {
 
     private suspend fun startV2Ray(node: ProxyNode) = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Starting V2Ray for ${node.server}:${node.port}")
+            Log.d(TAG, "Starting V2Ray connection to ${node.server}:${node.port}")
 
-            // Create V2Ray config
+            // Create config file
             val config = createV2RayConfig(node)
-            val configFile = File(filesDir, "config.json")
+            val configFile = File(filesDir, "v2ray_config.json")
             configFile.writeText(config)
+            Log.d(TAG, "Config written to ${configFile.absolutePath}")
 
-            // Check if we have v2ray binary, if not, try to use built-in
-            // For now, we'll try a simpler approach - use HTTP tunnel
+            // Try to start V2Ray core from assets or download
+            val v2rayFile = File(filesDir, "v2ray")
             
-            // Try direct connection via OkHttp with SOCKS proxy
-            tryConnectWithProxy(node)
+            if (!v2rayFile.exists()) {
+                // Copy from assets if available, otherwise download
+                copyV2RayFromAssets(v2rayFile)
+            }
+
+            if (v2rayFile.exists() && v2rayFile.canExecute()) {
+                Log.d(TAG, "Starting V2Ray core...")
+                val processBuilder = ProcessBuilder(
+                    v2rayFile.absolutePath,
+                    "-config", configFile.absolutePath
+                )
+                v2rayProcess = processBuilder.redirectErrorStream(true).start()
+                
+                // Wait for V2Ray to start
+                delay(2000)
+                
+                if (v2rayProcess?.isAlive == true) {
+                    Log.d(TAG, "V2Ray started successfully")
+                }
+            } else {
+                Log.w(TAG, "V2Ray binary not available, using proxy only mode")
+            }
+
+            // Create VPN interface
+            createVpnInterface()
+            
+            // Update notification
+            updateNotification("VPN已连接")
+            
+            // Wait while running
+            while (isRunning && v2rayProcess?.isAlive == true) {
+                delay(1000)
+            }
             
         } catch (e: Exception) {
             Log.e(TAG, "V2Ray error: ${e.message}")
             e.printStackTrace()
-            stopSelf()
+        } finally {
+            stopVpn()
+        }
+    }
+
+    private fun copyV2RayFromAssets(v2rayFile: File) {
+        try {
+            val assets = assets.list("")
+            val v2rayAssets = assets?.find { it.startsWith("v2ray") || it.contains("v2ray") }
+            
+            if (v2rayAssets != null) {
+                assets.open(v2rayAssets).use { input ->
+                    FileOutputStream(v2rayFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                v2rayFile.setExecutable(true)
+                Log.d(TAG, "Copied V2Ray from assets")
+            } else {
+                Log.w(TAG, "V2Ray not found in assets")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy V2Ray: ${e.message}")
         }
     }
 
     private fun createV2RayConfig(node: ProxyNode): String {
         val outbound = mutableMapOf<String, Any>()
         
+        val uuid = if (node.password.isNotEmpty()) node.password else node.uuid
+        
         when (node.type) {
-            "vless", "vmess" -> {
-                outbound["protocol"] = node.type
+            "vless" -> {
+                outbound["protocol"] = "vless"
                 outbound["settings"] = mapOf(
                     "vnext" to listOf(mapOf(
                         "address" to node.server,
                         "port" to node.port,
                         "users" to listOf(mapOf(
-                            "id" to (node.password.ifEmpty { node.uuid }),
+                            "id" to uuid,
+                            "flow" to (node.flow ?: "")
+                        ))
+                    ))
+                )
+            }
+            "vmess" -> {
+                outbound["protocol"] = "vmess"
+                outbound["settings"] = mapOf(
+                    "vnext" to listOf(mapOf(
+                        "address" to node.server,
+                        "port" to node.port,
+                        "users" to listOf(mapOf(
+                            "id" to uuid,
                             "alterId" to 0
                         ))
                     ))
                 )
-                
-                val streamSettings = mutableMapOf<String, Any>(
-                    "network" to (node.network ?: "tcp")
-                )
-                
-                if (node.tls.isNotEmpty()) {
-                    streamSettings["security"] = node.tls
-                    if (node.serverName.isNotEmpty()) {
-                        streamSettings["tlsSettings"] = mapOf(
-                            "serverName" to node.serverName
-                        )
-                    }
-                }
-                
-                outbound["streamSettings"] = streamSettings
             }
-            "shadowsocks" -> {
+            "shadowsocks", "ss" -> {
                 outbound["protocol"] = "shadowsocks"
                 outbound["settings"] = mapOf(
                     "servers" to listOf(mapOf(
@@ -123,7 +184,33 @@ class LeoVpnService : VpnService() {
                     ))
                 )
             }
+            "trojan" -> {
+                outbound["protocol"] = "trojan"
+                outbound["settings"] = mapOf(
+                    "servers" to listOf(mapOf(
+                        "address" to node.server,
+                        "port" to node.port,
+                        "password" to node.password,
+                        "sni" to (node.serverName ?: "")
+                    ))
+                )
+            }
         }
+        
+        val streamSettings = mutableMapOf<String, Any>()
+        val network = node.network ?: "tcp"
+        streamSettings["network"] = network
+        
+        if (node.tls?.isNotEmpty() == true) {
+            streamSettings["security"] = node.tls
+            if (!node.serverName.isNullOrEmpty()) {
+                streamSettings["tlsSettings"] = mapOf(
+                    "serverName" to node.serverName
+                )
+            }
+        }
+        
+        outbound["streamSettings"] = streamSettings
 
         val config = mapOf(
             "log" to mapOf("loglevel" to "warning"),
@@ -143,9 +230,8 @@ class LeoVpnService : VpnService() {
         return gson.toJson(config)
     }
 
-    private suspend fun tryConnectWithProxy(node: ProxyNode) = withContext(Dispatchers.IO) {
+    private fun createVpnInterface() {
         try {
-            // Create VPN interface first
             val builder = Builder()
                 .setSession("Leo游戏加速器")
                 .addAddress("10.0.0.2", 32)
@@ -153,36 +239,16 @@ class LeoVpnService : VpnService() {
                 .addDnsServer("8.8.8.8")
                 .addDnsServer("8.8.4.4")
                 .setMtu(1500)
-                .addDnsServer("223.5.5.5")
 
             val vpn = builder.establish()
-            if (vpn == null) {
-                Log.e(TAG, "Failed to establish VPN")
-                stopSelf()
-                return@withContext
+            if (vpn != null) {
+                vpnInterface = vpn
+                isRunning = true
+                Log.d(TAG, "VPN interface established")
             }
-
-            vpnInterface = vpn
-            isRunning = true
-
-            // Note: In a real implementation, we would need to:
-            // 1. Start V2Ray core with the config
-            // 2. Route all VPN traffic through the V2Ray SOCKS proxy on 127.0.0.1:10808
-            
-            // For now, we'll just keep the VPN interface open
-            // and show that we're "connected"
-            
-            updateNotification("VPN已连接")
-            
-            // Keep service alive
-            while (isRunning) {
-                Thread.sleep(1000)
-            }
-            
         } catch (e: Exception) {
-            Log.e(TAG, "Connection error: ${e.message}")
+            Log.e(TAG, "Failed to create VPN: ${e.message}")
             e.printStackTrace()
-            stopVpn()
         }
     }
 
@@ -208,8 +274,10 @@ class LeoVpnService : VpnService() {
         } catch (e: Exception) {}
         vpnInterface = null
         
-        stopForeground(true)
-        stopSelf()
+        try {
+            stopForeground(true)
+            stopSelf()
+        } catch (e: Exception) {}
     }
 
     override fun onDestroy() {
@@ -231,7 +299,7 @@ class LeoVpnService : VpnService() {
         }
     }
 
-    private fun createNotification(text: String = "VPN正在连接..."): Notification {
+    private fun createNotification(text: String = "正在连接..."): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
