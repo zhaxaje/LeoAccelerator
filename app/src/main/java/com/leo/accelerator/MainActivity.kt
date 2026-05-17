@@ -83,7 +83,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startVpnService() {
-        currentNode?.let { node ->
+        val node = currentNode
+        if (node == null) {
+            Toast.makeText(this, "请先等待节点加载完成", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
             val intent = Intent(this, LeoVpnService::class.java).apply {
                 putExtra("host", node.server)
                 putExtra("port", node.port)
@@ -95,6 +100,9 @@ class MainActivity : AppCompatActivity() {
             isConnected = true
             connectBtn.text = "断开连接"
             statusText.text = "正在连接..."
+        } catch (e: Exception) {
+            Toast.makeText(this, "启动失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            statusText.text = "连接失败"
         }
     }
 
