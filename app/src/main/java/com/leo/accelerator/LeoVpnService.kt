@@ -60,18 +60,19 @@ class LeoVpnService : VpnService() {
                     val inputStream = FileInputStream(fd)
                     val outputStream = FileOutputStream(fd)
 
-                val buffer = ByteBuffer.allocate(32767)
+                    val buffer = ByteBuffer.allocate(32767)
 
-                while (isRunning) {
-                    try {
-                        val length = inputStream.read(buffer.array())
-                        if (length > 0) {
-                            buffer.limit(length)
-                            processPacket(buffer, host, port, username, password, protocol)
-                            buffer.clear()
+                    while (isRunning) {
+                        try {
+                            val length = inputStream.read(buffer.array())
+                            if (length > 0) {
+                                buffer.limit(length)
+                                processPacket(buffer, host, port, username, password, protocol)
+                                buffer.clear()
+                            }
+                        } catch (e: Exception) {
+                            break
                         }
-                    } catch (e: Exception) {
-                        break
                     }
                 }
 
