@@ -57,13 +57,4 @@
         android:background="@drawable/btn_connect"
         android:layout_marginTop="40dp" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="默认订阅: http://t.leocok.cn:2096/clash/zibamzwco99t84mv"
-        android:textSize="12sp"
-        android:textColor="@color/text_hint"
-        android:layout_marginTop="30dp"
-        android:gravity="center" />
-
 </LinearLayout>
