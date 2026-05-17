@@ -8,6 +8,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -16,7 +17,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var connectBtn: Button
-    private lateinit var nodeText: TextView
 
     private var vpnService: LeoVpnService? = null
     private var isConnected = false
@@ -32,7 +32,6 @@ class MainActivity : AppCompatActivity() {
 
         statusText = findViewById(R.id.statusText)
         connectBtn = findViewById(R.id.connectBtn)
-        nodeText = findViewById(R.id.nodeText)
 
         connectBtn.setOnClickListener {
             if (isConnected) {
@@ -54,50 +53,45 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (nodes.isNotEmpty()) {
                     currentNode = nodes.first()
-                    nodeText.text = "当前节点: ${currentNode?.name}"
-                    statusText.text = "已加载 ${nodes.size} 个节点"
+                    statusText.text = "已加载 ${nodes.size} 个节点: ${currentNode?.name}"
                     connectBtn.isEnabled = true
-                    Toast.makeText(this@MainActivity, "订阅加载成功", Toast.LENGTH_SHORT).show()
+                    connectBtn.text = "连接加速"
                 } else {
                     statusText.text = "加载失败：无节点"
-                    connectBtn.isEnabled = false
                 }
             } catch (e: Exception) {
                 statusText.text = "加载失败: ${e.message}"
-                connectBtn.isEnabled = false
             }
         }
     }
 
     private fun connectVPN() {
-        val intent = VpnService.prepare(this)
-        if (intent != null) {
-            startActivityForResult(intent, 1)
+        val node = currentNode
+        if (node == null) {
+            Toast.makeText(this, "请先等待节点加载完成", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val prepareIntent = VpnService.prepare(this)
+        if (prepareIntent != null) {
+            startActivityForResult(prepareIntent, 1)
         } else {
-            startVpnService()
+            startVpnService(node)
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == RESULT_OK) {
-            startVpnService()
+            currentNode?.let { startVpnService(it) }
         }
     }
 
-    private fun startVpnService() {
-        val node = currentNode
-        if (node == null) {
-            Toast.makeText(this, "请先等待节点加载完成", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun startVpnService(node: ProxyNode) {
         try {
+            val nodeJson = Gson().toJson(node)
             val intent = Intent(this, LeoVpnService::class.java).apply {
-                putExtra("host", node.server)
-                putExtra("port", node.port)
-                putExtra("username", node.username)
-                putExtra("password", node.password)
-                putExtra("protocol", node.type)
+                putExtra("node", nodeJson)
             }
             startForegroundService(intent)
             isConnected = true

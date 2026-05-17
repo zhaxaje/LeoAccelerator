@@ -38,15 +38,6 @@
         android:textColor="@color/text_secondary"
         android:layout_marginTop="30dp" />
 
-    <TextView
-        android:id="@+id/nodeText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="当前节点: 未选择"
-        android:textSize="14sp"
-        android:textColor="@color/text_secondary"
-        android:layout_marginTop="10dp" />
-
     <Button
         android:id="@+id/connectBtn"
         android:layout_width="200dp"
