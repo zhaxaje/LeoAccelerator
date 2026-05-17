@@ -5,8 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.net.VpnService
-import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -17,10 +18,24 @@ class LeoVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var isRunning = false
+    private val handler = Handler(Looper.getMainLooper())
 
     companion object {
         private const val CHANNEL_ID = "leo_vpn_channel"
         private const val NOTIFICATION_ID = 1
+    }
+
+    private fun showNotification(message: String) {
+        try {
+            val notification = createNotification().apply {
+                this.flags = notification.flags or Notification.FLAG_AUTO_CANCEL
+                android.content.BigTextStyle(android.app.Notification.Builder(this@LeoVpnService, CHANNEL_ID))
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun onCreate() {
@@ -29,13 +44,26 @@ class LeoVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val host = intent?.getStringExtra("host") ?: return START_NOT_STICKY
+        if (intent == null) {
+            return START_NOT_STICKY
+        }
+
+        val host = intent.getStringExtra("host")
         val port = intent.getIntExtra("port", 0)
         val username = intent.getStringExtra("username") ?: ""
         val password = intent.getStringExtra("password") ?: ""
         val protocol = intent.getStringExtra("protocol") ?: "ss"
 
-        startForeground(NOTIFICATION_ID, createNotification())
+        if (host.isNullOrEmpty() || port == 0) {
+            return START_NOT_STICKY
+        }
+
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         startVpnConnection(host, port, username, password, protocol)
 
         return START_STICKY
@@ -46,18 +74,17 @@ class LeoVpnService : VpnService() {
 
         Thread {
             try {
-                val vpn = Builder()
+                val builder = Builder()
                     .setSession("Leo游戏加速器")
                     .addAddress("10.0.0.2", 32)
                     .addRoute("0.0.0.0", 0)
                     .addDnsServer("8.8.8.8")
                     .addDnsServer("8.8.4.4")
                     .setMtu(1500)
-                    .establish()
 
-                if (vpn == null) {
+                val vpn = builder.establish() ?: run {
                     android.util.Log.e("LeoVpn", "VPN建立失败")
-                    stopVpn()
+                    handler.post { showNotification("VPN连接失败") }
                     return@Thread
                 }
 
