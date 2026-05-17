@@ -55,9 +55,9 @@ class LeoVpnService : VpnService() {
                     .setMtu(1500)
                     .establish()
 
-                vpnInterface = builder
+                vpnInterface = builder.establish()!!
 
-                val fd = builder.establish()!!
+                val fd = vpnInterface.fileDescriptor
                 val inputStream = FileInputStream(fd)
                 val outputStream = FileOutputStream(fd)
 
